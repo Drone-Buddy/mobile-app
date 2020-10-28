@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'dart:math';
 
 void main() {
   runApp(DroneBuddyApp());
@@ -39,21 +43,82 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  int _counter = 0;
+  bool userInfoAvailable = false;
 
-  void _incrementCounter() {
+  bool nameError = false;
+  String name = "";
+  bool gtidError = false;
+  int gtid = 0;
+  String database_hash = null;
+
+  final _nameFormFieldController = TextEditingController();
+  final _gtidFormFieldController = TextEditingController();
+
+  void _callDrone() {
+    if (userInfoAvailable == false) {
+      userInfoAlertDialog();
+    } else {
+      // TODO: Access Database to Call Drone
+
+    }
+  }
+
+  Future<void> userInfoAlertDialog() async {
+    return showDialog<void>(
+        context: context,
+        barrierDismissible: false, // user must tap button!
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text("Set Up Account"),
+            content: SingleChildScrollView(
+              child: ListBody(
+                children: <Widget>[
+                  nameFormField(context),
+                  gtidFormField(context)
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              FlatButton(
+                child: Text("Cancel", style: TextStyle(color: Colors.red)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              FlatButton(
+                child: Text("Add"),
+                onPressed: () {
+                  print(
+                      "nameError: $nameError && gtidError: $gtidError\nname: $name && gtid: $gtid");
+                  if (!(nameError || gtidError)) {
+                    _addUserInfo();
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ],
+          );
+        });
+  }
+
+  _checkUserInfo() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      gtid = prefs.getInt('gtid');
+      name = prefs.getString('username');
+      database_hash = prefs.getString('database_hash');
+      if (gtid > 0 && name.length > 0 && database_hash.length > 0) {
+        userInfoAvailable = true;
+      } else {
+        userInfoAvailable = false;
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    _checkUserInfo();
+
     // Below list for testing purposes.
     // TODO: Add WebSocket to AWS in order to get Drone Data and Supply GPS Data
     var available_drones = [
@@ -111,7 +176,7 @@ class _MainPageState extends State<MainPage> {
                       color: Colors.grey.withOpacity(0.075),
                       spreadRadius: 5,
                       blurRadius: 7,
-                      offset: Offset(0, 3), // changes position of shadow
+                      offset: Offset(0, 3), // change position of shadow
                     ),
                   ],
                 ),
@@ -175,36 +240,12 @@ class _MainPageState extends State<MainPage> {
       );
     }
 
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
         appBar: AppBar(
-          // Here we take the value from the MyHomePage object that was created by
-          // the App.build method, and use it to set our appbar title.
           title: Text(widget.title),
         ),
         body: Center(
-          // Center is a layout widget. It takes a single child and positions it
-          // in the middle of the parent.
           child: Column(
-            // Column is also a layout widget. It takes a list of children and
-            // arranges them vertically. By default, it sizes itself to fit its
-            // children horizontally, and tries to be as tall as its parent.
-            //
-            // Invoke "debug painting" (press "p" in the console, choose the
-            // "Toggle Debug Paint" action from the Flutter Inspector in Android
-            // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-            // to see the wireframe for each widget.
-            //
-            // Column has various properties to control how it sizes itself and
-            // how it positions its children. Here we use mainAxisAlignment to
-            // center the children vertically; the main axis here is the vertical
-            // axis because Columns are vertical (the cross axis would be
-            // horizontal).
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisSize: MainAxisSize.max,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -232,6 +273,7 @@ class _MainPageState extends State<MainPage> {
               RaisedButton(
                   onPressed: () {
                     print("CALL DRONE!");
+                    _callDrone();
                   },
                   child: Text("Call Closest Drone")),
               Container(
@@ -240,5 +282,102 @@ class _MainPageState extends State<MainPage> {
             ],
           ),
         ));
+  }
+
+  static const _chars =
+      'AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz1234567890';
+  Random _rnd = Random();
+  String getRandomSaltString(int length) =>
+      String.fromCharCodes(Iterable.generate(
+          length, (_) => _chars.codeUnitAt(_rnd.nextInt(_chars.length))));
+
+  _addUserInfo() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('gtid', gtid);
+    await prefs.setString('username', name);
+
+    var saltString = getRandomSaltString(10) +
+        name +
+        getRandomSaltString(10) +
+        gtid.toString() +
+        getRandomSaltString(10);
+    var bytes = utf8.encode(saltString);
+    setState(() {
+      database_hash = sha512.convert(bytes).toString();
+    });
+
+    await prefs.setString('database_hash', database_hash);
+  }
+
+  void test() {
+    print("Name: $name");
+  }
+
+  TextField nameFormField(BuildContext context) {
+    return TextField(
+      controller: _nameFormFieldController,
+      keyboardType: TextInputType.text,
+      textInputAction: TextInputAction.done,
+      onChanged: (text) {
+        setState(() {
+          print("nameFormField: $text");
+          if (text.length == 0) {
+            nameError = true;
+          } else {
+            nameError = false;
+            name = text;
+          }
+        });
+      },
+      decoration: InputDecoration(
+        hintText: "Full Name",
+        // icon: Icon(Icons.person),
+        fillColor: Colors.white,
+        labelText: "Full Name",
+        errorText: nameError ? "Please Enter Your Name" : null,
+      ),
+    );
+  }
+
+  String errorNameMessage() {
+    if (nameError) {
+      return "Please Enter Your Name";
+    } else {
+      return null;
+    }
+  }
+
+  TextField gtidFormField(BuildContext context) {
+    return TextField(
+      controller: _gtidFormFieldController,
+      keyboardType: TextInputType.number,
+      textInputAction: TextInputAction.done,
+      onChanged: (text) {
+        setState(() {
+          print("gtidFormField: $text");
+          if (text.length < 9) {
+            gtidError = true;
+          } else {
+            gtidError = false;
+            gtid = int.parse(text);
+          }
+        });
+      },
+      decoration: InputDecoration(
+        hintText: "Gt Id",
+        // icon: Icon(Icons.person),
+        fillColor: Colors.white,
+        labelText: "Gt Id",
+        errorText: gtidError ? "Please Enter Your GTID" : null,
+      ),
+    );
+  }
+
+  String errorGtIdMessage() {
+    if (gtidError) {
+      return "Please Enter Your GTID";
+    } else {
+      return null;
+    }
   }
 }
