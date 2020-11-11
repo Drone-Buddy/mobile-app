@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'AWS.dart';
 
 void main() {
   runApp(DroneBuddyApp());
@@ -21,9 +22,6 @@ class DroneBuddyApp extends StatelessWidget {
     );
   }
 }
-
-String websocketUrl =
-    "wss://10eoew3urf.execute-api.us-east-1.amazonaws.com/development";
 
 class DroneObject {
   int id;
@@ -49,7 +47,9 @@ class _MainPageState extends State<MainPage> {
   String name = "";
   bool gtidError = false;
   int gtid = 0;
-  String database_hash = null;
+  String database_hash = "";
+
+  AWS aws = new AWS();
 
   final _nameFormFieldController = TextEditingController();
   final _gtidFormFieldController = TextEditingController();
@@ -57,10 +57,16 @@ class _MainPageState extends State<MainPage> {
   void _callDrone() {
     if (userInfoAvailable == false) {
       userInfoAlertDialog();
+      print(
+          "_callDrone() nameError: $nameError && gtidError: $gtidError\nname: $name && gtid: $gtid");
     } else {
       // TODO: Access Database to Call Drone
-
+      aws.setUpGpsUpdater(database_hash);
     }
+  }
+
+  void _stopDrone() {
+    aws.stopGpsUpdater();
   }
 
   Future<void> userInfoAlertDialog() async {
@@ -89,7 +95,7 @@ class _MainPageState extends State<MainPage> {
                 child: Text("Add"),
                 onPressed: () {
                   print(
-                      "nameError: $nameError && gtidError: $gtidError\nname: $name && gtid: $gtid");
+                      "userInfoAlertDialog() nameError: $nameError && gtidError: $gtidError\nname: $name && gtid: $gtid");
                   if (!(nameError || gtidError)) {
                     _addUserInfo();
                     Navigator.of(context).pop();
@@ -103,21 +109,47 @@ class _MainPageState extends State<MainPage> {
 
   _checkUserInfo() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      gtid = prefs.getInt('gtid');
-      name = prefs.getString('username');
-      database_hash = prefs.getString('database_hash');
-      if (gtid > 0 && name.length > 0 && database_hash.length > 0) {
-        userInfoAvailable = true;
-      } else {
-        userInfoAvailable = false;
-      }
+    gtid = prefs.getInt('gtid');
+    name = prefs.getString('username');
+    database_hash = prefs.getString('database_hash');
+    if (gtid != null &&
+        name != null &&
+        database_hash != null &&
+        gtid > 0 &&
+        name.length > 0 &&
+        database_hash.length > 0) {
+      userInfoAvailable = true;
+      print(
+          "Found values in sharedpreferences ==> database_hash: $database_hash and name: $name  and gtid: $gtid");
+    } else {
+      userInfoAvailable = false;
+    }
+  }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    _checkUserInfo().then((value) {
+      print('Attempted to get values from sharedpreferences done');
     });
+    super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    _checkUserInfo();
+    if (!aws.isOpen) {
+      aws.open();
+    }
+
+    // if (gtid > 0 && name.length > 0 && database_hash.length > 0) {
+    //   setState(() {
+    //     userInfoAvailable = true;
+    //   });
+    // } else {
+    //   setState(() {
+    //     userInfoAvailable = false;
+    //   });
+    // }
 
     // Below list for testing purposes.
     // TODO: Add WebSocket to AWS in order to get Drone Data and Supply GPS Data
@@ -277,6 +309,15 @@ class _MainPageState extends State<MainPage> {
                   },
                   child: Text("Call Closest Drone")),
               Container(
+                height: 8,
+              ),
+              RaisedButton(
+                  onPressed: () {
+                    print("Stop DRONE!");
+                    _stopDrone();
+                  },
+                  child: Text("Stop Calling!")),
+              Container(
                 height: 20,
               ),
             ],
@@ -292,6 +333,13 @@ class _MainPageState extends State<MainPage> {
           length, (_) => _chars.codeUnitAt(_rnd.nextInt(_chars.length))));
 
   _addUserInfo() async {
+    print("_addUserInfo() Name: $name and Gtid: $gtid");
+
+    if (name == null || gtid == null) {
+      print("_addUserInfo() ERROR: Could not get name or gtid");
+      return;
+    }
+
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setInt('gtid', gtid);
     await prefs.setString('username', name);
@@ -304,13 +352,16 @@ class _MainPageState extends State<MainPage> {
     var bytes = utf8.encode(saltString);
     setState(() {
       database_hash = sha512.convert(bytes).toString();
+      userInfoAvailable = true;
     });
+
+    aws.addUser(database_hash, name, gtid.toString());
 
     await prefs.setString('database_hash', database_hash);
   }
 
   void test() {
-    print("Name: $name");
+    print("Test Name: $name Test Gtid: $gtid");
   }
 
   TextField nameFormField(BuildContext context) {
@@ -321,13 +372,14 @@ class _MainPageState extends State<MainPage> {
       onChanged: (text) {
         setState(() {
           print("nameFormField: $text");
+          name = text;
           if (text.length == 0) {
             nameError = true;
           } else {
             nameError = false;
-            name = text;
           }
         });
+        test();
       },
       decoration: InputDecoration(
         hintText: "Full Name",
@@ -355,13 +407,14 @@ class _MainPageState extends State<MainPage> {
       onChanged: (text) {
         setState(() {
           print("gtidFormField: $text");
+          gtid = int.parse(text);
           if (text.length < 9) {
             gtidError = true;
           } else {
             gtidError = false;
-            gtid = int.parse(text);
           }
         });
+        test();
       },
       decoration: InputDecoration(
         hintText: "Gt Id",
