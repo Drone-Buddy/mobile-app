@@ -54,49 +54,71 @@ class AWS {
     this.channel.sink.add(jsonString);
   }
 
-  String getGpsNmeaGPGGA() {
-    String nmeaSentence = "\$GPGGA";
+  String decimalToDegrees(double pos) {
+    pos = pos.abs();
+    double dd = pos;
+    int d = dd.toInt();
+    double mm = ((dd - d) * 60);
+    String degrees = d.toString().padLeft(2, '0');
+    if (mm < 10) {
+      degrees += "0";
+    }
+    degrees += mm.toString();
+    print(
+        "d => ${d.toString().padLeft(2, '0')}  &&  mm => ${mm < 10 ? "0" + mm.toString() : mm.toString()}");
+    return degrees;
+  }
 
-//     final DateTime utcTime = DateTime.now().toUtc();
+  String latitudeToDegrees(double latitude) {
+    String isNorth = "N";
+    if (latitude < 0) isNorth = "S";
+    return decimalToDegrees(latitude) + "," + isNorth;
+  }
 
-//       double dd = 30.263888889;
-//   print("dd: $dd");
-//   int d = dd.toInt();
-//   print("d: $d");
-//   double mm = ((dd - d) * 60);
-//   int m = mm.toInt();
-//   print("m: $m");
-//   double ss = (dd - d - m/60) * 3600;
-//   int s = ss.toInt();
-//   print("s: $ss");
+  String longitudeToDegrees(double longitude) {
+    String isEast = "E";
+    if (longitude < 0) isEast = "W";
+    return decimalToDegrees(longitude) + "," + isEast;
+  }
 
-//   dd = 40.003760;
-//   print("dd: $dd");
-//   d = dd.toInt();
-//   print("d: $d");
-//   mm = ((dd - d) * 60);
-//   m = mm.toInt();
-//   print("m: $m");
-//   ss = (dd - d - m/60) * 3600;
-//   s = ss.toInt();
-//   print("s: $ss");
+  String getGpsNmeaGPGGA(Position position) {
+    String nmeaSentence = "GPGGA";
+    final DateTime now = DateTime.now().toUtc().add(new Duration(hours: 10));
+    nmeaSentence += "," +
+        "${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.00";
 
-//   dd = -86.086818;
-//   print("dd: $dd");
-//   d = dd.toInt();
-//   print("d: $d");
-//   mm = ((dd - d) * 60);
-//   m = mm.toInt();
-//   print("m: $m");
-//   ss = (dd - d - m/60) * 3600;
-//   s = ss.toInt();
-//   print("s: $ss");
+    nmeaSentence += "," + latitudeToDegrees(position.latitude);
+    nmeaSentence += "," + longitudeToDegrees(position.longitude);
 
-//   String nmeaSentence = "\$GPGGA";
-//   print(nmeaSentence);
-// final DateTime now = DateTime.now().toUtc().add(new Duration(hours:10));
-//     print(
-//         "[${now.hour.toString().padLeft(2,'0')}${now.minute.toString().padLeft(2,'0')}${now.second.toString().padLeft(2,'0')}.00]");
+    nmeaSentence += "," + "05"; // GPS Quality indicator
+    nmeaSentence += "," + "05"; // No. of Satelites
+    nmeaSentence += "," + position.accuracy.toString(); // Accuracy --> HDOP
+    nmeaSentence +=
+        "," + position.altitude.toString() + ",M"; // Altitude with Units
+    nmeaSentence += ","; // 	Geoid separation
+    nmeaSentence += ","; //   M: geoid separation measured in meters
+    nmeaSentence +=
+        ","; //   Age of differential GPS data record, Type 1 or Type 9. Null field when DGPS is not used.
+    nmeaSentence += ","; //   	Reference station ID, range 0000-4095.
+    nmeaSentence += ","; // Comma for CHECKSUM
+
+    // Checksum calculation
+    int checksum = 0;
+    List bytes = utf8.encode(nmeaSentence);
+    for (var i = 0; i < bytes.length; i++) {
+      checksum ^= bytes[i];
+    }
+    checksum = checksum.toUnsigned(8);
+    checksum &= 0x00FF; // MAKE SURE only 8 bits is used
+
+    nmeaSentence += "*" +
+        checksum
+            .toRadixString(16)
+            .toString()
+            .padLeft(2, '0'); // Adding checksum
+
+    nmeaSentence = "\$" + nmeaSentence;
+    return nmeaSentence;
   }
 
   void sendGps(String databaseHash, Position position) {
@@ -118,7 +140,7 @@ class AWS {
     gpsValue["speed"] = "" + position.speed.toString();
     gpsValue["speed_accuracy"] = "" + position.speedAccuracy.toString();
     gpsValue["is_mocked"] = "" + position.isMocked.toString();
-
+    gpsValue["nmea"] = getGpsNmeaGPGGA(position);
     jsonValue["gpsdata"] = gpsValue;
 
     String jsonString = json.encode(jsonValue);
