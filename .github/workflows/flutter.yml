@@ -23,7 +23,7 @@ jobs:
           flutter-version: '1.22.4'
           channel: 'stable'
       - run: flutter pub get
-      - run: flutter build apk --debug --split-per-abi
+      # - run: flutter build apk --debug --split-per-abi
       - run: flutter build apk --release --split-per-abi
         env:
           KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
@@ -32,10 +32,10 @@ jobs:
           KEY_PATH: key.jks
       # - run: flutter build appbundle --debug
       # - run: flutter build appbundle --release
-      - uses: actions/upload-artifact@v2
-        with:
-          name: Debug APK Files
-          path: build/app/outputs/apk/debug/*.apk
+      # - uses: actions/upload-artifact@v2
+      #   with:
+      #     name: Debug APK Files
+      #     path: build/app/outputs/apk/debug/*.apk
       - uses: actions/upload-artifact@v2
         with:
           name: Release APK Files
