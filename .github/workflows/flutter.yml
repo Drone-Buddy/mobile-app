@@ -29,13 +29,18 @@ jobs:
       - run: flutter pub get
       # build Android version
       - run: flutter build apk --debug --split-per-abi
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Debug APK
+          path: build/app/outputs/apk/debug/*.apk
       # This action will create a github release and optionally upload an artifact to it.
       # https://github.com/ncipollo/release-action
-      - name: Create a Release APK
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "build/app/outputs/apk/debug/*.apk,build/macos/Build/Products/Release/*.app"
-          token: ${{ secrets.GITHUB_TOKEN }}
+      
+#       - name: Create a Release APK
+#         uses: ncipollo/release-action@v1
+#         with:
+#           artifacts: "build/app/outputs/apk/debug/*.apk,build/macos/Build/Products/Release/*.app"
+#           token: ${{ secrets.GITHUB_TOKEN }}
       # build Flutter web version
       - run: flutter build web
       # Handle the deploy process of your project to GitHub Pages.
