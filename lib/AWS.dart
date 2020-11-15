@@ -59,7 +59,7 @@ class AWS {
     double dd = pos;
     int d = dd.toInt();
     double mm = ((dd - d) * 60);
-    String degrees = d.toString().padLeft(2, '0');
+    String degrees = d.toStringAsFixed(0).padLeft(2, '0');
     if (mm < 10) {
       degrees += "0";
     }
@@ -100,7 +100,6 @@ class AWS {
     nmeaSentence +=
         ","; //   Age of differential GPS data record, Type 1 or Type 9. Null field when DGPS is not used.
     nmeaSentence += ","; //   	Reference station ID, range 0000-4095.
-    nmeaSentence += ","; // Comma for CHECKSUM
 
     // Checksum calculation
     int checksum = 0;
