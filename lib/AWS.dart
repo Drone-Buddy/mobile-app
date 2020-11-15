@@ -90,7 +90,7 @@ class AWS {
     nmeaSentence += "," + latitudeToDegrees(position.latitude);
     nmeaSentence += "," + longitudeToDegrees(position.longitude);
 
-    nmeaSentence += "," + "05"; // GPS Quality indicator
+    nmeaSentence += "," + "1"; // GPS Quality indicator
     nmeaSentence += "," + "05"; // No. of Satelites
     nmeaSentence += "," + position.accuracy.toString(); // Accuracy --> HDOP
     nmeaSentence +=
